@@ -4,4 +4,4 @@ yum install libpcap-devel
 
 # codes for compiling should be written
 
-gcc -o project_1 project_1.c -lpcap -I/usr/lib
+gcc -o project_1 project_1.c -std=c99 -lpcap -I/usr/lib
