@@ -6,6 +6,11 @@
 #include <pcap.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ctype.h>
+#include <string.h>
+
+/* default snap length (maximum bytes per packet to capture) */
+#define SNAP_LEN 1518
 
 /* ethernet headers are always exactly 14 bytes [1] */
 #define SIZE_ETHERNET 14
@@ -64,6 +69,40 @@ struct sniff_tcp {
 	u_short th_urp;                 /* urgent pointer */
 };
 
+/*
+ * print packet payload data (avoid printing binary data)
+ */
+void
+print_payload(const u_char *payload, int len)
+{
+
+	int i;
+	const u_char *ch = payload;
+
+	if (len <= 0)
+		return;
+
+	if (strncmp((char*)payload, "HEAD", 4) == 0) {
+		// it's a request
+		printf("Request\r\n");
+	} else {
+		//it's a response
+		printf("Response\r\n");
+	}
+
+	ch = payload;
+	for(i = 0; i < len; i++) {
+		if (isprint(*ch) || isspace(*ch))
+			printf("%c", *ch);
+		else
+			printf(".");
+		ch++;
+	}
+
+	printf("\n");
+
+	return;
+}
 
 /*
  * What should we do with the packet?
@@ -72,16 +111,14 @@ void
 got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
 	static int count = 1;                   /* packet counter */
-	printf("%d ", count++);
-	
 	const struct sniff_ethernet *ethernet; /* The ethernet header */
 	const struct sniff_ip *ip; /* The IP header */
 	const struct sniff_tcp *tcp; /* The TCP header */
-	const char *payload; /* Packet payload */
+	const u_char *payload; /* Packet payload */
 
-	u_int size_ip;
-	u_int size_tcp;
-
+	int size_ip;
+	int size_tcp;
+	int size_payload;
 
 	ethernet = (struct sniff_ethernet*)(packet);
 	ip = (struct sniff_ip*)(packet + SIZE_ETHERNET);
@@ -98,18 +135,29 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 	}
 	payload = (u_char *)(packet + SIZE_ETHERNET + size_ip + size_tcp);
 
+	/* compute tcp payload (segment) size */
+	size_payload = ntohs(ip->ip_len) - (size_ip + size_tcp);
+
+	if (size_payload > 0) {
+		printf("%d ", count++);
+		
+		/* print source IP */
+		printf("%s:", inet_ntoa(ip->ip_src));
+		// source port
+		printf("%d ", ntohs(tcp->th_sport));
+
+		//destination ip
+		printf("%s:", inet_ntoa(ip->ip_dst));
+		//destination port
+		printf("%d HTTP ", ntohs(tcp->th_dport));
+		//printf("   Payload (%d bytes):\n", size_payload);
+		print_payload(payload, size_payload);
+	}
+
 	//printf("caplen: %u, len: %u\n", header->caplen, header->len);
 	//printf("packet contents:\n%s\n", packet);
 	
-	/* print source IP */
-	printf("%s:", inet_ntoa(ip->ip_src));
-	// source port
-	printf("%d ", ntohs(tcp->th_sport));
-
-	//destination ip
-	printf("%s:", inet_ntoa(ip->ip_dst));
-	//destination port
-	printf("%d HTTP\n", ntohs(tcp->th_dport));
+	//printf("protocol: %d\n", ip->ip_p); //6 ==TCP
 	return;
 }
 
@@ -120,7 +168,7 @@ main(int argc, char **argv)
 	char errbuf[PCAP_ERRBUF_SIZE];       /* error buffer */
 	pcap_t *handle;                      /* packet capture handle */
 
-	char filter_exp[] = "tcp port 80";   /* filter expression [3] */
+	char filter_exp[] = "tcp and dst port 80";   /* filter expression [3] */
 	struct bpf_program fp;               /* compiled filter program */
 	bpf_u_int32 mask;                    /* subnet mask */
 	bpf_u_int32 net;                     /* ip */
@@ -145,7 +193,7 @@ main(int argc, char **argv)
 	printf("Sniffing on device: %s\n", dev);
 
 	/* open capture device */
-	handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+	handle = pcap_open_live(dev, SNAP_LEN, 1, 1000, errbuf);
 	if (handle == NULL) {
 		fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
 		return(2);
