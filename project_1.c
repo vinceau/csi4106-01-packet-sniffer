@@ -3,11 +3,18 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <pcap.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <string.h>
+#include <sys/stat.h>
+
+const char POST_DIR[] = "post/";   /* place to store post files */
+
+/* max length of the filenames created by the POST responses*/
+#define MAX_FILENAME_SIZE 64
 
 /* default snap length (maximum bytes per packet to capture) */
 #define SNAP_LEN 1518
@@ -70,33 +77,73 @@ struct sniff_tcp {
 };
 
 /*
+ * This will not close the file!
+ */
+FILE*
+prep_post(int num)
+{
+	char filename[MAX_FILENAME_SIZE + strlen(POST_DIR)];
+	mkdir(POST_DIR, 0700);
+	sprintf(filename, "%s/%d.txt", POST_DIR, num);
+	FILE *f = fopen(filename, "w");
+	return f;
+}
+
+/*
  * print packet payload data (avoid printing binary data)
  */
 void
-print_payload(const u_char *payload, int len)
+print_payload(const u_char *payload, int len, int packet_num)
 {
+	int end_header = 0;
+	int is_post = 0;
+	FILE* f;
+	const u_char *ch;
 
-	int i;
-	const u_char *ch = payload;
+	//if (len <= 0)
+		//return;
 
-	if (len <= 0)
-		return;
-
-	if (strncmp((char*)payload, "HEAD", 4) == 0) {
-		// it's a request
-		printf("Request\r\n");
-	} else {
+	if (strncmp((char*)payload, "HTTP", 4) == 0) {
 		//it's a response
 		printf("Response\r\n");
+	} else {
+		// it's a request
+		printf("Request\r\n");
+		if (strncmp((char*)payload, "POST", 4) == 0) {
+			is_post = 1;
+			f = prep_post(packet_num);
+		}
 	}
 
 	ch = payload;
-	for(i = 0; i < len; i++) {
-		if (isprint(*ch) || isspace(*ch))
-			printf("%c", *ch);
-		else
-			printf(".");
+	for (int i = 0; i < len; i++) {
+		if (end_header && is_post) {
+			if (isprint(*ch))
+				fprintf(f, "%c", *ch);
+		} else {
+			if (isprint(*ch) || isspace(*ch))
+				printf("%c", *ch);
+			else
+				printf(".");
+			if (strncmp((char*)ch, "\r\n\r\n", 4) == 0) {
+				end_header = 1;
+				if (is_post) {
+					//skip to the body of the request
+					printf("\n\r\n");
+					ch += 3;
+					i += 3;
+				}
+				else
+					break;
+			}
+		}
 		ch++;
+	}
+
+	// ch should be right before the post body with the parameters
+	// so we should be able to just write this to a file
+	if (is_post) {
+		fclose(f);
 	}
 
 	printf("\n");
@@ -139,7 +186,7 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 	size_payload = ntohs(ip->ip_len) - (size_ip + size_tcp);
 
 	if (size_payload > 0) {
-		printf("%d ", count++);
+		printf("%d ", count);
 		
 		/* print source IP */
 		printf("%s:", inet_ntoa(ip->ip_src));
@@ -151,7 +198,8 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 		//destination port
 		printf("%d HTTP ", ntohs(tcp->th_dport));
 		//printf("   Payload (%d bytes):\n", size_payload);
-		print_payload(payload, size_payload);
+		print_payload(payload, size_payload, count);
+		count++;
 	}
 
 	//printf("caplen: %u, len: %u\n", header->caplen, header->len);
