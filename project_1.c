@@ -16,9 +16,6 @@ const char POST_DIR[] = "post/";   /* place to store post files */
 /* max length of the filenames created by the POST responses*/
 #define MAX_FILENAME_SIZE 64
 
-/* default snap length (maximum bytes per packet to capture) */
-#define SNAP_LEN 1518
-
 /* ethernet headers are always exactly 14 bytes [1] */
 #define SIZE_ETHERNET 14
 
@@ -76,8 +73,23 @@ struct sniff_tcp {
 	u_short th_urp;                 /* urgent pointer */
 };
 
+FILE*
+prep_post(int num);
+
+int
+classify_packet(const u_char *payload, int len);
+
+void
+print_payload(const u_char *payload, int len, int packet_num);
+
+void
+got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
+
+
 /*
- * This will not close the file!
+ * Generates the POST_DIR directory if it doesn't already exist, and then
+ * creates a text file with the name <num>.txt and returns the file pointer.
+ * Note: This will not close the file!
  */
 FILE*
 prep_post(int num)
@@ -91,9 +103,10 @@ prep_post(int num)
 
 
 /*
- * This returns:
- * 0: for request
- * 1: for response
+ * Checks to see what kind of HTTP header is in the packet payload.
+ * Returns:
+ * 0: for Requests
+ * 1: for Response
  * -1: for anything else
  */
 int
@@ -123,7 +136,8 @@ classify_packet(const u_char *payload, int len)
 }
 
 /*
- * print packet payload data (avoid printing binary data)
+ * This prints the HTTP header of the packet.
+ * packet_num is needed for the naming of the file if it's a POST request.
  */
 void
 print_payload(const u_char *payload, int len, int packet_num)
@@ -133,9 +147,6 @@ print_payload(const u_char *payload, int len, int packet_num)
 	FILE* f;
 	const u_char *ch;
 
-	//if (len <= 0)
-		//return;
-
 	if (strncmp((char*)payload, "POST", 4) == 0) {
 		is_post = 1;
 		f = prep_post(packet_num);
@@ -144,6 +155,8 @@ print_payload(const u_char *payload, int len, int packet_num)
 	ch = payload;
 	for (int i = 0; i < len; i++) {
 		if (end_header && is_post) {
+			//ch should now be right before the entity body
+			//print the rest into the file
 			if (isprint(*ch))
 				fprintf(f, "%c", *ch);
 		} else {
@@ -164,11 +177,9 @@ print_payload(const u_char *payload, int len, int packet_num)
 		ch++;
 	}
 
-	// ch should be right before the post body with the parameters
-	// so we should be able to just write this to a file
-	if (is_post) {
+	//don't forget to close the file
+	if (is_post)
 		fclose(f);
-	}
 
 	printf("\n");
 
@@ -176,12 +187,16 @@ print_payload(const u_char *payload, int len, int packet_num)
 }
 
 /*
- * What should we do with the packet?
+ * Each time we receive a packet we check the size of the payload. If a payload
+ * exists then determine the type of HTTP header. Incomplete HTTP headers are
+ * filtered out. If it is a Response or a Request, print out the header using
+ * print_payload()
  */
 void
 got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
-	static int count = 1;                   /* packet counter */
+	static int count = 1;                   /* requests counter */
+
 	const struct sniff_ethernet *ethernet; /* The ethernet header */
 	const struct sniff_ip *ip; /* The IP header */
 	const struct sniff_tcp *tcp; /* The TCP header */
@@ -235,15 +250,10 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 			printf("Response\r\n");
 		}
 
-		//printf("   Payload (%d bytes):\n", size_payload);
 		print_payload(payload, size_payload, count);
 		count++;
 	}
 
-	//printf("caplen: %u, len: %u\n", header->caplen, header->len);
-	//printf("packet contents:\n%s\n", packet);
-	
-	//printf("protocol: %d\n", ip->ip_p); //6 ==TCP
 	return;
 }
 
@@ -279,7 +289,7 @@ main(int argc, char **argv)
 	printf("Sniffing on device: %s\n", dev);
 
 	/* open capture device */
-	handle = pcap_open_live(dev, SNAP_LEN, 1, 1000, errbuf);
+	handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
 	if (handle == NULL) {
 		fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
 		return(2);
