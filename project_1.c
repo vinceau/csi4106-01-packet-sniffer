@@ -181,6 +181,11 @@ print_payload(const u_char *payload, int len, int packet_num)
 	if (is_post)
 		fclose(f);
 
+	//did the header actually terminate? if it didn't then let's pretend
+	//that it did by printing out some new lines
+	if (!end_header)
+		printf("\r\n\r\n");
+
 	printf("\n");
 
 	return;
