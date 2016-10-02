@@ -140,7 +140,7 @@ classify_packet(const u_char *payload, int len)
  * packet_num is needed for the naming of the file if it's a POST request.
  */
 void
-print_payload(const u_char *payload, int len, int packet_num)
+print_payload(const u_char *payload, int len, int header_num)
 {
 	int end_header = 0;
 	int is_post = 0;
@@ -149,7 +149,7 @@ print_payload(const u_char *payload, int len, int packet_num)
 
 	if (strncmp((char*)payload, "POST", 4) == 0) {
 		is_post = 1;
-		f = prep_post(packet_num);
+		f = prep_post(header_num);
 	}
 
 	ch = payload;
@@ -200,7 +200,7 @@ print_payload(const u_char *payload, int len, int packet_num)
 void
 got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 {
-	static int count = 1;                   /* requests counter */
+	static int count = 1;                   /* header counter */
 
 	const struct sniff_ethernet *ethernet; /* The ethernet header */
 	const struct sniff_ip *ip; /* The IP header */
