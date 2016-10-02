@@ -89,6 +89,39 @@ prep_post(int num)
 	return f;
 }
 
+
+/*
+ * This returns:
+ * 0: for request
+ * 1: for response
+ * -1: for anything else
+ */
+int
+classify_packet(const u_char *payload, int len)
+{
+	//check if it's a response
+	if (strncmp((char*)payload, "HTTP", 4) == 0)
+		return 1;
+
+	//maybe it's a request
+	const u_char *ch;
+	int space_count = 0;
+	ch = payload;
+	for (int i = 0; i < len; i++) {
+		// only process the first line
+		if (strncmp((char*)ch, "\r\n", 2) == 0 || !isprint(*ch))
+			break;
+		if (isspace(*ch))
+			space_count++;
+		if (space_count == 2 && strncmp((char*)ch, " HTTP", 5) == 0)
+			return 0;
+		ch++;
+	}
+
+	//it's an incomplete header
+	return -1;
+}
+
 /*
  * print packet payload data (avoid printing binary data)
  */
@@ -103,16 +136,9 @@ print_payload(const u_char *payload, int len, int packet_num)
 	//if (len <= 0)
 		//return;
 
-	if (strncmp((char*)payload, "HTTP", 4) == 0) {
-		//it's a response
-		printf("Response\r\n");
-	} else {
-		// it's a request
-		printf("Request\r\n");
-		if (strncmp((char*)payload, "POST", 4) == 0) {
-			is_post = 1;
-			f = prep_post(packet_num);
-		}
+	if (strncmp((char*)payload, "POST", 4) == 0) {
+		is_post = 1;
+		f = prep_post(packet_num);
 	}
 
 	ch = payload;
@@ -180,12 +206,19 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 		printf("   * Invalid TCP header length: %u bytes\n", size_tcp);
 		return;
 	}
+
 	payload = (u_char *)(packet + SIZE_ETHERNET + size_ip + size_tcp);
 
 	/* compute tcp payload (segment) size */
 	size_payload = ntohs(ip->ip_len) - (size_ip + size_tcp);
 
 	if (size_payload > 0) {
+		//check if we have something useful
+		int p_type = classify_packet(payload, size_payload);
+		if (p_type == -1) {
+			return;
+		}
+
 		printf("%d ", count);
 		
 		/* print source IP */
@@ -197,6 +230,13 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 		printf("%s:", inet_ntoa(ip->ip_dst));
 		//destination port
 		printf("%d HTTP ", ntohs(tcp->th_dport));
+
+		if (p_type == 0) {
+			printf("Request\r\n");
+		} else {
+			printf("Response\r\n");
+		}
+
 		//printf("   Payload (%d bytes):\n", size_payload);
 		print_payload(payload, size_payload, count);
 		count++;
