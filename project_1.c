@@ -153,14 +153,12 @@ print_payload(const u_char *payload, int len, int packet_num)
 				printf(".");
 			if (strncmp((char*)ch, "\r\n\r\n", 4) == 0) {
 				end_header = 1;
-				if (is_post) {
-					//skip to the body of the request
-					printf("\n\r\n");
-					ch += 3;
-					i += 3;
-				}
-				else
+				printf("\n\r\n");
+				if (!is_post)
 					break;
+				//skip to the body of the request
+				ch += 3;
+				i += 3;
 			}
 		}
 		ch++;
