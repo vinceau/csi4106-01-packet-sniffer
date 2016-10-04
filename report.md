@@ -19,7 +19,7 @@ gcc -o project_1 project_1.c -std=c99 -lpcap
 
 #Program Commentary
 
-The program sniffs network packets using the library pcap (`#include <pcap.h`) using the filter "tcp post 80". We use the function `pcap_loop()` with a count of -1 to continue looping until terminated.
+The program sniffs network packets using the library pcap (`#include <pcap.h>`) using the filter "tcp post 80". We use the function `pcap_loop()` with a count of -1 to continue looping until terminated.
 
 Each time a packet is found, the function `got_packet()` is called. This function checks to see if the packet contains a valid TCP and IP header size before unpacking the packet and the payload. If the size of the payload is 0, we ignore the packet. Otherwise, the payload is passed to the function `classify_packet()` which will determine what kind of HTTP header is contained within the payload.
 
