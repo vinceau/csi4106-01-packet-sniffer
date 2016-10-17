@@ -96,7 +96,7 @@ prep_post(int num)
 {
 	char filename[MAX_FILENAME_SIZE + strlen(POST_DIR)];
 	mkdir(POST_DIR, 0700);
-	sprintf(filename, "%s/%d.txt", POST_DIR, num);
+	snprintf(filename, sizeof(filename), "%s/%d.txt", POST_DIR, num);
 	FILE *f = fopen(filename, "w");
 	return f;
 }
