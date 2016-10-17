@@ -233,9 +233,8 @@ got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
 	if (size_payload > 0) {
 		//check if we have something useful
 		int p_type = classify_packet(payload, size_payload);
-		if (p_type == -1) {
+		if (p_type == -1)
 			return;
-		}
 
 		printf("%d ", count);
 		
