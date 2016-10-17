@@ -80,7 +80,7 @@ int
 classify_packet(const u_char *payload, int len);
 
 void
-print_payload(const u_char *payload, int len, int packet_num);
+print_payload(const u_char *payload, int len, int header_num);
 
 void
 got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
@@ -137,7 +137,7 @@ classify_packet(const u_char *payload, int len)
 
 /*
  * This prints the HTTP header of the packet.
- * packet_num is needed for the naming of the file if it's a POST request.
+ * header_num is needed for the naming of the file if it's a POST request.
  */
 void
 print_payload(const u_char *payload, int len, int header_num)
