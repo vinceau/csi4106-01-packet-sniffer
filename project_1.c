@@ -157,7 +157,7 @@ print_payload(const u_char *payload, int len, int header_num)
 		if (end_header && is_post) {
 			//ch should now be right before the entity body
 			//print the rest into the file
-			if (isprint(*ch))
+			if (isprint(*ch) || isspace(*ch))
 				fprintf(f, "%c", *ch);
 		} else {
 			if (isprint(*ch) || isspace(*ch))
